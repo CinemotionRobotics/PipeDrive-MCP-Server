@@ -548,7 +548,7 @@ For **OpenAI Assistants API** with function calling, generate the function defin
 
 ### OpenAI Codex (Codex CLI)
 
-[Codex CLI](https://github.com/openai/openai-codex) supports MCP natively via its config file at `~/.codex/config.yaml`:
+[Codex CLI](https://github.com/openai/openai-codex) supports MCP via its config file at `~/.codex/config.yaml`:
 
 ```yaml
 mcpServers:
@@ -563,6 +563,21 @@ mcpServers:
 Restart Codex after saving. Tools will appear automatically in the session.
 
 > **Note for nvm/homebrew users:** Specify the full path to `node`, e.g. `/opt/homebrew/opt/node@20/bin/node`.
+
+#### Codex GUI (Add MCP Server form)
+
+If you're using the Codex desktop interface or any MCP client with a graphical **Add Server** form, fill in the fields as follows:
+
+| Field | Value |
+|-------|-------|
+| **Name** | `Pipedrive` |
+| **Type** | `STDIO` |
+| **Command to launch** | `node` (or full path: `/opt/homebrew/opt/node@20/bin/node`) |
+| **Arguments** | `/absolute/path/to/PipeDrive-MCP-Server/dist/index.js` |
+| **Environment variables** | Key: `PIPEDRIVE_API_TOKEN` / Value: your API token |
+| **Working directory** | `/absolute/path/to/PipeDrive-MCP-Server` |
+
+Add one argument entry and one environment variable entry, then click **Save**.
 
 ---
 
