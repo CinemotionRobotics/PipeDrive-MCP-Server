@@ -1245,6 +1245,53 @@ server.tool(
   async ({ id }) => ok(await pd("GET", `/mailbox/mailThreads/${id}/mailMessages`))
 );
 
+server.tool(
+  "pipedrive_get_mail_message",
+  "Get a single mail message by ID. Pass include_body=1 to fetch the full HTML body — without it you only get metadata + 250-300 char snippet. Body can be ~500KB per message (HTML with quoted thread + signatures + inline attachments); use sparingly and parse before returning to a user-facing context.",
+  {
+    id: z.coerce.number().describe("Mail message ID"),
+    include_body: z.coerce.number().optional().describe("Pass 1 to include the HTML body, omit or 0 to skip"),
+  },
+  async ({ id, include_body }) =>
+    ok(await pd("GET", `/mailbox/mailMessages/${id}`, undefined, { include_body }))
+);
+
+server.tool(
+  "pipedrive_list_deal_mail_messages",
+  "List mail messages attached to a deal. Returns metadata + snippet for each message. Use pipedrive_get_mail_message with include_body=1 to fetch a specific message's full HTML body. Note: items come wrapped as {object, timestamp, data: {id, ...}} — the actual message ID is in item.data.id, NOT item.id (which is null).",
+  {
+    deal_id: z.coerce.number().describe("Deal ID"),
+    start: z.coerce.number().optional().describe("Pagination start (default 0)"),
+    limit: z.coerce.number().optional().describe("Items per page (default 50)"),
+  },
+  async ({ deal_id, start, limit }) =>
+    ok(await pd("GET", `/deals/${deal_id}/mailMessages`, undefined, { start, limit }))
+);
+
+server.tool(
+  "pipedrive_list_person_mail_messages",
+  "List mail messages attached to a person. Returns metadata + snippet for each message. Use pipedrive_get_mail_message with include_body=1 for full body. Same wrapper note as pipedrive_list_deal_mail_messages.",
+  {
+    person_id: z.coerce.number().describe("Person ID"),
+    start: z.coerce.number().optional().describe("Pagination start (default 0)"),
+    limit: z.coerce.number().optional().describe("Items per page (default 50)"),
+  },
+  async ({ person_id, start, limit }) =>
+    ok(await pd("GET", `/persons/${person_id}/mailMessages`, undefined, { start, limit }))
+);
+
+server.tool(
+  "pipedrive_list_organization_mail_messages",
+  "List mail messages attached to an organization. Returns metadata + snippet for each message. Use pipedrive_get_mail_message with include_body=1 for full body. Same wrapper note as pipedrive_list_deal_mail_messages.",
+  {
+    org_id: z.coerce.number().describe("Organization ID"),
+    start: z.coerce.number().optional().describe("Pagination start (default 0)"),
+    limit: z.coerce.number().optional().describe("Items per page (default 50)"),
+  },
+  async ({ org_id, start, limit }) =>
+    ok(await pd("GET", `/organizations/${org_id}/mailMessages`, undefined, { start, limit }))
+);
+
 // ---------------------------------------------------------------------------
 // REPORTING & ANALYTICS
 // ---------------------------------------------------------------------------
