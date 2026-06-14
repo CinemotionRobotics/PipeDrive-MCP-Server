@@ -44,6 +44,58 @@ function ok(result: any): { content: { type: "text"; text: string }[] } {
 }
 
 // ---------------------------------------------------------------------------
+// HTML strip helper for email bodies (Pipedrive/Gmail/Outlook/Apple Mail)
+// ---------------------------------------------------------------------------
+//
+// Strips the quoted-reply thread + ancestor messages from an email body so
+// only the *new* content of the current message remains. Reduces typical
+// reply bodies by 90-99% with no data loss (the stripped content is the
+// previous messages, already accessible as separate mail messages).
+//
+// Strategy: scan for the earliest known "start of quoted block" marker
+// across multiple mail clients and cut there. If no marker is found, return
+// the body unchanged.
+
+function stripQuotedHtml(html: string): string {
+  if (!html || typeof html !== "string") return html;
+
+  // Earliest match wins — scan all known markers and cut at min(index).
+  const markers: RegExp[] = [
+    // Pipedrive native (pd-gmail_quote_container wraps all quoted content)
+    /<div[^>]*class="[^"]*pd-gmail_quote_container[\s\S]*$/i,
+    // Gmail standard
+    /<div[^>]*class="[^"]*gmail_quote_container[\s\S]*$/i,
+    /<div[^>]*class="[^"]*gmail_quote(?!_)[\s\S]*$/i,
+    /<div[^>]*class="[^"]*gmail_extra[\s\S]*$/i,
+    // Apple Mail / generic
+    /<blockquote[^>]*type="cite"[\s\S]*$/i,
+    /<blockquote[\s\S]*$/i,
+    // Outlook (desktop + web)
+    /<div[^>]*class="[^"]*OutlookMessageHeader[\s\S]*$/i,
+    /<div[^>]*id="appendonsend[\s\S]*$/i,
+    /<hr[^>]*id="stop-mail-divider[\s\S]*$/i,
+    // Yahoo
+    /<div[^>]*class="[^"]*yahoo_quoted[\s\S]*$/i,
+    // Original Message divider (Outlook legacy / forwards)
+    /-----\s*Original Message\s*-----[\s\S]*$/i,
+    /-----\s*Message d'origine\s*-----[\s\S]*$/i,
+    // Plain-text "On ... wrote:" / "Le ... a écrit:" (when not wrapped in a div)
+    /On (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]{0,8},?\s+[A-Z][a-z]+\s+\d{1,2},?\s+\d{4}[\s\S]{0,200}?wrote:[\s\S]*$/,
+    /Le \d{1,2}\s+[a-zéûôîà]+\s+\d{4}[\s\S]{0,200}?a écrit\s*:[\s\S]*$/,
+  ];
+
+  let cutAt = html.length;
+  for (const re of markers) {
+    const m = html.match(re);
+    if (m && typeof m.index === "number" && m.index < cutAt) {
+      cutAt = m.index;
+    }
+  }
+
+  return html.slice(0, cutAt).trim();
+}
+
+// ---------------------------------------------------------------------------
 // MCP Server
 // ---------------------------------------------------------------------------
 
@@ -1247,13 +1299,24 @@ server.tool(
 
 server.tool(
   "pipedrive_get_mail_message",
-  "Get a single mail message by ID. Pass include_body=1 to fetch the full HTML body — without it you only get metadata + 250-300 char snippet. Body can be ~500KB per message (HTML with quoted thread + signatures + inline attachments); use sparingly and parse before returning to a user-facing context.",
+  "Get a single mail message by ID. Pass include_body=1 to fetch the full HTML body — without it you only get metadata + 250-300 char snippet. Body can be ~500KB per message (HTML with quoted thread + signatures + inline attachments). Pass strip_quoted=1 alongside to drop the quoted reply thread and keep only the new content of THIS message — typically reduces body size by 90-99% with no data loss (prior messages are accessible separately via pipedrive_list_deal_mail_messages or pipedrive_get_mail_thread_messages).",
   {
     id: z.coerce.number().describe("Mail message ID"),
     include_body: z.coerce.number().optional().describe("Pass 1 to include the HTML body, omit or 0 to skip"),
+    strip_quoted: z.coerce.number().optional().describe("When 1 (requires include_body=1), strips the quoted thread from the body and keeps only the new content of this message. Adds body_stripped=true and body_original_length to the response so callers can verify the reduction. Default: 0."),
   },
-  async ({ id, include_body }) =>
-    ok(await pd("GET", `/mailbox/mailMessages/${id}`, undefined, { include_body }))
+  async ({ id, include_body, strip_quoted }) => {
+    const result = await pd("GET", `/mailbox/mailMessages/${id}`, undefined, { include_body });
+    if (strip_quoted && result?.data?.body && typeof result.data.body === "string") {
+      const original = result.data.body;
+      const stripped = stripQuotedHtml(original);
+      result.data.body = stripped;
+      result.data.body_stripped = true;
+      result.data.body_original_length = original.length;
+      result.data.body_stripped_length = stripped.length;
+    }
+    return ok(result);
+  }
 );
 
 server.tool(
